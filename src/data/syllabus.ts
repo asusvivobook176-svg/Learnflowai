@@ -3,6 +3,7 @@ import {
   StudentProfile,
   Question,
   Misconception,
+  MisconceptionLibraryEntry,
   RevisionTask,
   AgentLog,
   User,
@@ -143,6 +144,7 @@ export const INITIAL_MISCONCEPTIONS: Misconception[] = [
     status: 'active',
     detectedAt: 'Yesterday, 4:15 PM',
     timesEncountered: 3,
+    libraryEntryId: 'lib-1',
   },
   {
     id: 'misc-voltage-resistor',
@@ -155,6 +157,7 @@ export const INITIAL_MISCONCEPTIONS: Misconception[] = [
     status: 'active',
     detectedAt: '2 days ago',
     timesEncountered: 2,
+    libraryEntryId: 'lib-5',
   },
   {
     id: 'misc-parallel-voltage',
@@ -167,6 +170,7 @@ export const INITIAL_MISCONCEPTIONS: Misconception[] = [
     status: 'in_progress',
     detectedAt: '3 days ago',
     timesEncountered: 1,
+    libraryEntryId: 'lib-6',
   },
 ];
 
@@ -226,6 +230,8 @@ export const INITIAL_REVISION_TASKS: RevisionTask[] = [
 ];
 
 export const DEMO_STUDENT_ALEX: StudentProfile = {
+  schemaVersion: 2,
+  learnerModelVersion: 1,
   id: 'student-alex-01',
   name: 'Alex Rivera',
   avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
@@ -246,6 +252,38 @@ export const DEMO_STUDENT_ALEX: StudentProfile = {
   consecutiveWrongByConcept: {
     'series-circuits': 1,
   },
+  practiceMetrics: [
+    {
+      id: 'pm-1',
+      timestamp: '2026-10-30T16:45:00.000Z',
+      conceptId: 'series-circuits',
+      isCorrect: false,
+      responseTimeMs: 28000,
+      confidence: 'high',
+      difficulty: 'medium',
+    },
+    {
+      id: 'pm-2',
+      timestamp: '2026-10-30T14:10:00.000Z',
+      conceptId: 'series-circuits',
+      isCorrect: false,
+      responseTimeMs: 22000,
+      confidence: 'low',
+      difficulty: 'easy',
+    },
+    {
+      id: 'pm-3',
+      timestamp: '2026-10-29T18:30:00.000Z',
+      conceptId: 'ohms-law',
+      isCorrect: true,
+      responseTimeMs: 11000,
+      confidence: 'high',
+      difficulty: 'medium',
+    },
+  ],
+  examPlan: null,
+  masteryBadges: [],
+  onboardingCompleted: false,
   teachBackRecords: [],
   socraticSessions: [],
   rescueEvents: [],
@@ -857,7 +895,12 @@ export const TEACHER_CLASS_DATA = {
       activeMisconceptions: 2,
       riskLevel: 'Moderate',
       lastActive: '12 min ago',
-      scores: { 'electric-current': 75, voltage: 68, resistance: 55, 'ohms-law': 85, 'series-circuits': 35, 'parallel-circuits': 42, 'electrical-power': 70 }
+      scores: { 'electric-current': 75, voltage: 68, resistance: 55, 'ohms-law': 85, 'series-circuits': 35, 'parallel-circuits': 42, 'electrical-power': 70 },
+      misconceptionsByConcept: {
+        'series-circuits': ['Current gets used up after passing through the first resistor'],
+        'parallel-circuits': ['Voltage divides equally between parallel branches'],
+        resistance: ['Stretching wire length doubles R without reducing cross-sectional area'],
+      } as Record<string, string[]>,
     },
     {
       id: 'st-2',
@@ -868,7 +911,8 @@ export const TEACHER_CLASS_DATA = {
       activeMisconceptions: 0,
       riskLevel: 'Excelling',
       lastActive: '1 hour ago',
-      scores: { 'electric-current': 95, voltage: 90, resistance: 88, 'ohms-law': 96, 'series-circuits': 82, 'parallel-circuits': 90, 'electrical-power': 81 }
+      scores: { 'electric-current': 95, voltage: 90, resistance: 88, 'ohms-law': 96, 'series-circuits': 82, 'parallel-circuits': 90, 'electrical-power': 81 },
+      misconceptionsByConcept: {} as Record<string, string[]>,
     },
     {
       id: 'st-3',
@@ -879,7 +923,13 @@ export const TEACHER_CLASS_DATA = {
       activeMisconceptions: 4,
       riskLevel: 'High Attention',
       lastActive: '3 hours ago',
-      scores: { 'electric-current': 55, voltage: 48, resistance: 40, 'ohms-law': 60, 'series-circuits': 30, 'parallel-circuits': 28, 'electrical-power': 48 }
+      scores: { 'electric-current': 55, voltage: 48, resistance: 40, 'ohms-law': 60, 'series-circuits': 30, 'parallel-circuits': 28, 'electrical-power': 48 },
+      misconceptionsByConcept: {
+        'series-circuits': ['First bulb consumes current before reaching second bulb'],
+        'parallel-circuits': ['Parallel resistors add up (R1 + R2)', 'Voltage splits across parallel branches'],
+        resistance: ['Increasing voltage automatically increases resistor resistance'],
+        voltage: ['Voltage flows through wires like current'],
+      } as Record<string, string[]>,
     },
     {
       id: 'st-4',
@@ -890,7 +940,10 @@ export const TEACHER_CLASS_DATA = {
       activeMisconceptions: 1,
       riskLevel: 'Good',
       lastActive: '5 hours ago',
-      scores: { 'electric-current': 80, voltage: 75, resistance: 72, 'ohms-law': 88, 'series-circuits': 50, 'parallel-circuits': 68, 'electrical-power': 85 }
+      scores: { 'electric-current': 80, voltage: 75, resistance: 72, 'ohms-law': 88, 'series-circuits': 50, 'parallel-circuits': 68, 'electrical-power': 85 },
+      misconceptionsByConcept: {
+        'series-circuits': ['Smaller resistor receives more current in series'],
+      } as Record<string, string[]>,
     },
     {
       id: 'st-5',
@@ -901,7 +954,12 @@ export const TEACHER_CLASS_DATA = {
       activeMisconceptions: 3,
       riskLevel: 'Moderate',
       lastActive: 'Yesterday',
-      scores: { 'electric-current': 65, voltage: 58, resistance: 38, 'ohms-law': 70, 'series-circuits': 40, 'parallel-circuits': 36, 'electrical-power': 52 }
+      scores: { 'electric-current': 65, voltage: 58, resistance: 38, 'ohms-law': 70, 'series-circuits': 40, 'parallel-circuits': 36, 'electrical-power': 52 },
+      misconceptionsByConcept: {
+        resistance: ['Thicker wire means more material so higher resistance'],
+        'parallel-circuits': ['Adding parallel branch increases equivalent resistance'],
+        'series-circuits': ['Current drops slightly after each bulb'],
+      } as Record<string, string[]>,
     },
   ],
   topClassMisconceptions: [
@@ -1042,3 +1100,166 @@ export const DEMO_TEACHER_USER: User = {
   department: 'Department of Physical Sciences',
   classSection: 'Class 10 - Section B (Physics)',
 };
+
+// 12-Entry Class 10 Physics – Electricity Misconception Library
+export const MISCONCEPTION_LIBRARY: MisconceptionLibraryEntry[] = [
+  {
+    id: 'lib-1',
+    name: 'Current Gets Used Up by a Resistor',
+    concept: 'Series Circuits',
+    conceptId: 'series-circuits',
+    exampleStudentPhrase: '"The first bulb uses up some of the current, so the second bulb gets less current."',
+    explanation: 'Electric current is the rate of flow of conserved electric charge (Coulombs per second). Charges carry electrical energy that is transferred to heat/light, but the electrons themselves are not destroyed or consumed—every ammeter in a single loop reads the same current.',
+    correctivePractice: 'Place virtual ammeters before, between, and after two unequal series resistors (4 Ω and 6 Ω) and calculate I = V / (R1 + R2) at each point.',
+    keywords: ['used up', 'uses up', 'eat', 'consumed', 'gets less', 'smaller current', 'first bulb'],
+    severity: 'high',
+  },
+  {
+    id: 'lib-2',
+    name: 'Parallel Resistors Add Up Directly',
+    concept: 'Parallel Circuits',
+    conceptId: 'parallel-circuits',
+    exampleStudentPhrase: '"If I connect two 10 Ω resistors in parallel, total resistance becomes 20 Ω."',
+    explanation: 'Connecting resistors in parallel opens extra conductive pathways between the same two potential nodes. Like opening extra toll lanes on a highway, total opposition decreases: 1/Rp = 1/R1 + 1/R2, so Rp is always smaller than the smallest branch resistor.',
+    correctivePractice: 'Solve equivalent resistance for two identical 10 Ω parallel branches using 1/Rp = 1/10 + 1/10 and verify Rp < 10 Ω.',
+    keywords: ['parallel add', 'resistors in parallel add', 'increases total resistance', '10 + 10', '20 ohm'],
+    severity: 'high',
+  },
+  {
+    id: 'lib-3',
+    name: 'Voltage Flows Through Wires Like Current',
+    concept: 'Voltage & Potential Difference',
+    conceptId: 'voltage',
+    exampleStudentPhrase: '"12 Volts flows out of the battery through the wire into the resistor."',
+    explanation: 'Current (charges/sec) flows through circuit paths; voltage is the potential difference (energy per Coulomb) measured ACROSS two points. A voltmeter must be wired in parallel across components, never in series.',
+    correctivePractice: 'Compare voltmeter vs. ammeter placement and compute W = V × Q between two distinct circuit nodes.',
+    keywords: ['voltage flows', 'volts flow', 'voltage moves', 'voltmeter in series'],
+    severity: 'medium',
+  },
+  {
+    id: 'lib-4',
+    name: 'Current Increases When Resistance Increases',
+    concept: "Ohm's Law",
+    conceptId: 'ohms-law',
+    exampleStudentPhrase: '"Because V = I·R, making R larger should make current larger too."',
+    explanation: 'At a fixed battery voltage V, current is I = V / R—current and resistance are INVERSELY proportional. A higher resistance obstructs charge flow more strongly, reducing current.',
+    correctivePractice: 'Predict current change on a 12 V battery when swapping from a 4 Ω resistor to an 8 Ω resistor using I = V/R.',
+    keywords: ['current increases when resistance', 'resistance increases current', 'i and r increase'],
+    severity: 'high',
+  },
+  {
+    id: 'lib-5',
+    name: 'Higher Resistance Forces Battery to Produce Higher Voltage',
+    concept: "Ohm's Law",
+    conceptId: 'ohms-law',
+    exampleStudentPhrase: '"When I replace a 4 Ω resistor with 8 Ω, the battery voltage goes up because V = IR."',
+    explanation: 'An ideal battery sets a fixed potential difference (EMF). Changing a resistor changes the circuit current I, not the battery rating V or the intrinsic resistance of other resistors.',
+    correctivePractice: 'Contrast independent variable (source V) vs. response variable (current I) across V-I plots.',
+    keywords: ['battery gives more volts', 'increases source voltage', 'resistance increases voltage', 'battery voltage doubles'],
+    severity: 'medium',
+  },
+  {
+    id: 'lib-6',
+    name: 'Voltage Divides Across Parallel Branches',
+    concept: 'Parallel Circuits',
+    conceptId: 'parallel-circuits',
+    exampleStudentPhrase: '"With two resistors in parallel across a 12 V battery, each branch only gets 6 V."',
+    explanation: 'Every parallel branch connects directly across the same pair of supply terminals, so every branch experiences the full supply voltage (12 V). It is the total CURRENT that splits between branches.',
+    correctivePractice: 'Calculate individual branch currents I1 = 12/4 and I2 = 12/8 using full 12 V across both branches.',
+    keywords: ['voltage splits', 'voltage divides', '6v each', 'used up in parallel'],
+    severity: 'medium',
+  },
+  {
+    id: 'lib-7',
+    name: 'Breaking One Series Bulb Leaves Others Lit',
+    concept: 'Series Circuits',
+    conceptId: 'series-circuits',
+    exampleStudentPhrase: '"If the second bulb in series burns out, the first bulb still stays on because current reached it first."',
+    explanation: 'A steady electric current requires an unbroken closed loop everywhere in the circuit simultaneously. An open gap anywhere halts current at every point in the series loop instantaneously.',
+    correctivePractice: 'Trace closed-loop continuity rules comparing series string lights vs. parallel household outlets.',
+    keywords: ['other bulbs stay on', 'first bulb stays lit', 'before the break'],
+    severity: 'low',
+  },
+  {
+    id: 'lib-8',
+    name: 'Thicker Wire Has Higher Resistance',
+    concept: 'Resistance & Factors',
+    conceptId: 'resistance',
+    exampleStudentPhrase: '"A thicker wire contains more metal atoms in its cross-section, so resistance increases."',
+    explanation: 'Resistance is R = ρ·L/A: cross-sectional area A is in the denominator. A wider wire offers more parallel paths for electrons simultaneously, reducing opposition.',
+    correctivePractice: 'Calculate how doubling diameter quadruples area A and reduces wire resistance to R/4.',
+    keywords: ['thicker wire', 'more area more resistance', 'area increases resistance'],
+    severity: 'medium',
+  },
+  {
+    id: 'lib-9',
+    name: 'Stretching a Wire Doubles R Without Changing Area',
+    concept: 'Resistance & Factors',
+    conceptId: 'resistance',
+    exampleStudentPhrase: '"Stretching a 20 Ω wire to double its length makes the resistance 40 Ω."',
+    explanation: 'Stretching preserves wire volume (V = L × A). Doubling length (2L) forces cross-sectional area to halve (A/2), so R_new = ρ(2L)/(A/2) = 4R = 80 Ω.',
+    correctivePractice: 'Step through volume-conserving wire stretching drills (factor of n² scaling).',
+    keywords: ['double length', '40 ohm', 'cancels out', 'area unchanged'],
+    severity: 'high',
+  },
+  {
+    id: 'lib-10',
+    name: 'Higher Resistance Always Dissipates More Power',
+    concept: 'Electrical Power & Energy',
+    conceptId: 'electrical-power',
+    exampleStudentPhrase: '"A higher resistance resistor always glows brighter using P = I²R."',
+    explanation: 'In SERIES (constant current I), P = I²R so larger R dissipates more power. In PARALLEL (constant voltage V), P = V²/R so SMALLER R draws more current and dissipates more power.',
+    correctivePractice: 'Compare two bulbs (40 W vs 100 W) connected first in series and then in parallel across 220 V.',
+    keywords: ['always brighter', 'high resistance always', 'p = i2r always'],
+    severity: 'medium',
+  },
+  {
+    id: 'lib-11',
+    name: 'Confusing Watts (Power) with Kilowatt-Hours (Energy)',
+    concept: 'Electrical Power & Energy',
+    conceptId: 'electrical-power',
+    exampleStudentPhrase: '"A 1000 W iron uses 1000 units of electrical energy."',
+    explanation: 'Watts (J/s) measure power—the RATE of energy use. Commercial electricity bills charge for ENERGY = Power (kW) × Time (hours) measured in kWh.',
+    correctivePractice: 'Convert appliance wattage to kW and compute monthly billing units E = P(kW) × t(h).',
+    keywords: ['watt is energy', 'kwh is power', '60000 kwh', 'without converting watts'],
+    severity: 'low',
+  },
+  {
+    id: 'lib-12',
+    name: 'Forgetting to Convert Minutes to Seconds in I = Q / t',
+    concept: 'Electric Current',
+    conceptId: 'electric-current',
+    exampleStudentPhrase: '"300 C in 5 minutes means I = 300 / 5 = 60 A."',
+    explanation: 'One Ampere equals 1 Coulomb per SECOND (1 A = 1 C/s). Time must always be converted to SI seconds (5 min = 300 s) before dividing.',
+    correctivePractice: 'Run SI unit conversion drills converting minutes/hours to seconds before evaluating I = Q/t.',
+    keywords: ['60 a', 'divided by 5 minutes', 'minutes directly'],
+    severity: 'low',
+  },
+];
+
+export function matchMisconceptionLibrary(
+  text: string,
+  conceptId?: string
+): MisconceptionLibraryEntry | null {
+  const lower = (text || '').toLowerCase().trim();
+  if (!lower) return null;
+
+  // Prefer entries from matching concept first
+  const candidates = conceptId
+    ? [
+        ...MISCONCEPTION_LIBRARY.filter((e) => e.conceptId === conceptId),
+        ...MISCONCEPTION_LIBRARY.filter((e) => e.conceptId !== conceptId),
+      ]
+    : MISCONCEPTION_LIBRARY;
+
+  for (const entry of candidates) {
+    if (entry.keywords.some((kw) => lower.includes(kw.toLowerCase()))) {
+      return entry;
+    }
+    if (lower.includes(entry.name.toLowerCase())) {
+      return entry;
+    }
+  }
+  return null;
+}
+

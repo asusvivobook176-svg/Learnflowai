@@ -30,6 +30,7 @@ const STUDENT_ROUTES = new Set([
   'concept-map',
   'practice',
   'revision',
+  'exam-planner',
   'misconceptions',
   'learn',
   'progress',

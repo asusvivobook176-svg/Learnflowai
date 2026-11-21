@@ -24,26 +24,24 @@ import { ArchitectureModal } from './components/ArchitectureModal';
 import { TeachBackView } from './components/TeachBackView';
 import { SocraticModeView } from './components/SocraticModeView';
 import { ConceptRescueView } from './components/ConceptRescueView';
+import { ExamPlannerView } from './components/ExamPlannerView';
+import { ToastContainer } from './components/ToastContainer';
+import { OnboardingTourModal } from './components/OnboardingTourModal';
 import {
   LayoutDashboard,
   Target,
   Network,
-  Mic,
-  Brain,
+  CalendarClock,
   BarChart3,
-  Users,
   Grid,
   AlertTriangle,
   FileText,
-  BookOpenCheck,
-  MessageCircleQuestion,
-  LifeBuoy,
 } from 'lucide-react';
 
 function AuthenticatedApp() {
   const { isAuthenticated, isStudent, isTeacher, role, canAccessRoute, getDefaultRouteForRole } =
     useAuth();
-  const { activeTab, setActiveTab } = useLearner();
+  const { activeTab, setActiveTab, profile, markOnboardingComplete } = useLearner();
 
   // Modals state
   const [isVoiceOpen, setIsVoiceOpen] = useState(false);
@@ -105,7 +103,10 @@ function AuthenticatedApp() {
         </div>
 
         {/* Teacher Mobile Bottom Navigation Bar */}
-        <div className="md:hidden border-t border-slate-800 bg-slate-950/95 backdrop-blur-md px-3 py-2 flex items-center justify-around z-30">
+        <nav
+          aria-label="Teacher mobile navigation"
+          className="no-print md:hidden border-t border-slate-800 bg-slate-950/95 backdrop-blur-md px-3 py-2 flex items-center justify-around z-30"
+        >
           <button
             onClick={() => setActiveTab('teacher-overview')}
             className={`flex flex-col items-center gap-1 text-[10px] font-semibold ${
@@ -151,13 +152,13 @@ function AuthenticatedApp() {
           <button
             onClick={() => setActiveTab('teacher-reports')}
             className={`flex flex-col items-center gap-1 text-[10px] font-semibold ${
-              activeTab === 'teacher-reports' ? 'text-cyan-400' : 'text-slate-400'
+              activeTab === 'teacher-reports' ? 'text-cyan-400' : 'text-slate-300'
             }`}
           >
             <FileText className="w-4 h-4" />
             <span>Reports</span>
           </button>
-        </div>
+        </nav>
 
         {/* System Architecture Modal */}
         <ArchitectureModal
@@ -257,6 +258,10 @@ function AuthenticatedApp() {
 
           {activeTab === 'revision' && <RevisionPlanView />}
 
+          {activeTab === 'exam-planner' && (
+            <ExamPlannerView onSelectConceptForPractice={handleSelectConceptForPractice} />
+          )}
+
           {activeTab === 'learn' && (
             <VoiceTutorView
               onOpenVoiceWithPrompt={handleOpenVoiceWithPrompt}
@@ -283,96 +288,59 @@ function AuthenticatedApp() {
         </main>
       </div>
 
-      {/* Mobile Learning Modes Strip */}
-      <div className="md:hidden border-t border-slate-800/80 bg-slate-950/90 px-3 py-1.5 flex items-center justify-center gap-2">
+      {/* Student Mobile Bottom Navigation Bar (4 Most-Used Pages) */}
+      <nav
+        aria-label="Student mobile navigation"
+        className="no-print md:hidden border-t border-slate-800 bg-slate-950/95 backdrop-blur-md px-4 py-2.5 flex items-center justify-around z-30"
+      >
         <button
-          onClick={() => setActiveTab('teach-back')}
-          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-semibold ${
-            activeTab === 'teach-back'
-              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-              : 'text-slate-400'
-          }`}
-        >
-          <BookOpenCheck className="w-3.5 h-3.5" />
-          <span>Teach Back</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('socratic')}
-          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-semibold ${
-            activeTab === 'socratic'
-              ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-              : 'text-slate-400'
-          }`}
-        >
-          <MessageCircleQuestion className="w-3.5 h-3.5" />
-          <span>Socratic</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('concept-rescue')}
-          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-semibold ${
-            activeTab === 'concept-rescue'
-              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-              : 'text-slate-400'
-          }`}
-        >
-          <LifeBuoy className="w-3.5 h-3.5" />
-          <span>Rescue</span>
-        </button>
-      </div>
-
-      {/* Student Mobile Bottom Navigation Bar */}
-      <div className="md:hidden border-t border-slate-800 bg-slate-950/95 backdrop-blur-md px-3 py-2 flex items-center justify-around z-30">
-        <button
+          type="button"
           onClick={() => setActiveTab('dashboard')}
-          className={`flex flex-col items-center gap-1 text-[10px] font-semibold ${
-            activeTab === 'dashboard' ? 'text-indigo-400' : 'text-slate-400'
+          aria-current={activeTab === 'dashboard' ? 'page' : undefined}
+          className={`flex flex-col items-center gap-1 text-[11px] font-semibold cursor-pointer ${
+            activeTab === 'dashboard' ? 'text-indigo-300' : 'text-slate-300'
           }`}
         >
           <LayoutDashboard className="w-4 h-4" />
-          <span>Home</span>
+          <span>Dashboard</span>
         </button>
 
         <button
-          onClick={() => setActiveTab('intelligence-center')}
-          className={`flex flex-col items-center gap-1 text-[10px] font-semibold ${
-            activeTab === 'intelligence-center' ? 'text-purple-400' : 'text-slate-400'
-          }`}
-        >
-          <Brain className="w-4 h-4" />
-          <span>Intelligence</span>
-        </button>
-
-        {/* Central Voice Button */}
-        <button
-          onClick={() => {
-            setVoiceInitialPrompt('');
-            setIsVoiceOpen(true);
-          }}
-          className="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center -mt-5 shadow-lg shadow-indigo-600/40 border-2 border-slate-950"
-        >
-          <Mic className="w-5 h-5" />
-        </button>
-
-        <button
-          onClick={() => setActiveTab('concept-map')}
-          className={`flex flex-col items-center gap-1 text-[10px] font-semibold ${
-            activeTab === 'concept-map' ? 'text-indigo-400' : 'text-slate-400'
-          }`}
-        >
-          <Network className="w-4 h-4" />
-          <span>Graph</span>
-        </button>
-
-        <button
+          type="button"
           onClick={() => setActiveTab('practice')}
-          className={`flex flex-col items-center gap-1 text-[10px] font-semibold ${
-            activeTab === 'practice' ? 'text-indigo-400' : 'text-slate-400'
+          aria-current={activeTab === 'practice' ? 'page' : undefined}
+          className={`flex flex-col items-center gap-1 text-[11px] font-semibold cursor-pointer ${
+            activeTab === 'practice' ? 'text-indigo-300' : 'text-slate-300'
           }`}
         >
           <Target className="w-4 h-4" />
           <span>Practice</span>
         </button>
-      </div>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('concept-map')}
+          aria-current={activeTab === 'concept-map' ? 'page' : undefined}
+          className={`flex flex-col items-center gap-1 text-[11px] font-semibold cursor-pointer ${
+            activeTab === 'concept-map' ? 'text-indigo-300' : 'text-slate-300'
+          }`}
+        >
+          <Network className="w-4 h-4" />
+          <span>Concept Map</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('exam-planner')}
+          aria-current={activeTab === 'exam-planner' ? 'page' : undefined}
+          className={`flex flex-col items-center gap-1 text-[11px] font-semibold cursor-pointer ${
+            activeTab === 'exam-planner' ? 'text-indigo-300' : 'text-slate-300'
+          }`}
+        >
+          <CalendarClock className="w-4 h-4" />
+          <span>Exam Plan</span>
+        </button>
+      </nav>
 
       {/* Student Modals */}
       <VoiceInputModal
@@ -390,6 +358,11 @@ function AuthenticatedApp() {
         isOpen={isArchitectureOpen}
         onClose={() => setIsArchitectureOpen(false)}
       />
+
+      <OnboardingTourModal
+        isOpen={isStudent && !profile.onboardingCompleted}
+        onComplete={() => markOnboardingComplete(true)}
+      />
     </div>
   );
 }
@@ -399,6 +372,7 @@ export default function App() {
     <AuthProvider>
       <LearnerProvider>
         <AuthenticatedApp />
+        <ToastContainer />
       </LearnerProvider>
     </AuthProvider>
   );

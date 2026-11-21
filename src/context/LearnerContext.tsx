@@ -14,19 +14,86 @@ import {
   SocraticSession,
   RescueEvent,
   RescueModeType,
+  ExamPlanState,
+  MasteryBadge,
+  PracticeAttemptMetric,
+  ToastItem,
 } from '../types/learning';
 import {
   DEMO_STUDENT_ALEX,
   INITIAL_AGENT_LOGS,
   CONCEPTS,
+  matchMisconceptionLibrary,
 } from '../data/syllabus';
 import { useAuth } from './AuthContext';
+
+export function migrateLearnerProfile(saved: any): StudentProfile {
+  const todayStr = new Date().toISOString().split('T')[0];
+  if (!saved || typeof saved !== 'object') {
+    return DEMO_STUDENT_ALEX;
+  }
+
+  const savedGoal: DailyGoalState = saved.dailyGoal || DEMO_STUDENT_ALEX.dailyGoal;
+  const isSameDay = savedGoal.lastGoalDate === todayStr;
+  const hydratedGoal: DailyGoalState = isSameDay
+    ? savedGoal
+    : {
+        ...savedGoal,
+        minutesPracticedToday: 0,
+        questionsAnsweredToday: 0,
+        lastGoalDate: todayStr,
+      };
+
+  const rawMiscs: Misconception[] = Array.isArray(saved.misconceptions)
+    ? saved.misconceptions.map((m: Misconception) => {
+        if (m.libraryEntryId) return m;
+        const matched = matchMisconceptionLibrary(
+          `${m.title} ${m.studentExplanationSnippet}`,
+          m.conceptId
+        );
+        return matched ? { ...m, libraryEntryId: matched.id } : m;
+      })
+    : DEMO_STUDENT_ALEX.misconceptions;
+
+  return {
+    ...DEMO_STUDENT_ALEX,
+    ...saved,
+    schemaVersion: 2,
+    learnerModelVersion:
+      typeof saved.learnerModelVersion === 'number' ? saved.learnerModelVersion : 1,
+    dailyGoal: hydratedGoal,
+    consecutiveWrongByConcept:
+      saved.consecutiveWrongByConcept || DEMO_STUDENT_ALEX.consecutiveWrongByConcept || {},
+    misconceptions: rawMiscs,
+    practiceMetrics: Array.isArray(saved.practiceMetrics)
+      ? saved.practiceMetrics
+      : DEMO_STUDENT_ALEX.practiceMetrics,
+    examPlan: saved.examPlan && typeof saved.examPlan === 'object' ? saved.examPlan : null,
+    masteryBadges: Array.isArray(saved.masteryBadges) ? saved.masteryBadges : [],
+    onboardingCompleted:
+      typeof saved.onboardingCompleted === 'boolean' ? saved.onboardingCompleted : false,
+    teachBackRecords: Array.isArray(saved.teachBackRecords) ? saved.teachBackRecords : [],
+    socraticSessions: Array.isArray(saved.socraticSessions) ? saved.socraticSessions : [],
+    rescueEvents: Array.isArray(saved.rescueEvents) ? saved.rescueEvents : [],
+    learningJourney:
+      saved.learningJourney && saved.learningJourney.length > 0
+        ? saved.learningJourney
+        : DEMO_STUDENT_ALEX.learningJourney,
+    confidenceRecords:
+      saved.confidenceRecords && saved.confidenceRecords.length > 0
+        ? saved.confidenceRecords
+        : DEMO_STUDENT_ALEX.confidenceRecords,
+  };
+}
 
 interface LearnerContextType {
   role: Role;
   setRole: (role: Role) => void;
   profile: StudentProfile;
   agentLogs: AgentLog[];
+  toasts: ToastItem[];
+  showToast: (message: string, type?: ToastItem['type']) => void;
+  dismissToast: (id: string) => void;
   addAgentLog: (
     agentName: AgentLog['agentName'],
     action: string,
@@ -45,6 +112,7 @@ interface LearnerContextType {
       difficulty?: DifficultyLevel;
       questionTitle?: string;
       minutesSpent?: number;
+      responseTimeMs?: number;
     }
   ) => void;
   addMisconception: (
@@ -53,7 +121,8 @@ interface LearnerContextType {
     title: string,
     explanationSnippet: string,
     aiCorrection: string,
-    severity: 'high' | 'medium' | 'low'
+    severity: 'high' | 'medium' | 'low',
+    libraryEntryId?: string
   ) => void;
   resolveMisconception: (id: string) => void;
   completeRevisionTask: (taskId: string) => void;
@@ -88,6 +157,10 @@ interface LearnerContextType {
     masteryDelta: number,
     notes?: string
   ) => void;
+  saveExamPlan: (plan: ExamPlanState, logCreation?: boolean) => void;
+  toggleExamPlanTask: (dayNumber: number, taskId: string) => void;
+  awardMasteryBadge: (badge: Omit<MasteryBadge, 'id' | 'earnedAt'>) => MasteryBadge;
+  markOnboardingComplete: (completed?: boolean) => void;
   activeTab: string;
   setActiveTab: (tab: string) => void;
 }
@@ -140,41 +213,25 @@ export const LearnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  const dismissToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const showToast = (message: string, type: ToastItem['type'] = 'info') => {
+    const id = `toast-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`;
+    setToasts((prev) => [...prev.slice(-3), { id, message, type }]);
+    setTimeout(() => {
+      dismissToast(id);
+    }, 4500);
+  };
+
   const [profile, setProfile] = useState<StudentProfile>(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
     try {
       const savedStr = localStorage.getItem(STORAGE_KEY);
       if (savedStr) {
-        const saved = JSON.parse(savedStr);
-        const savedGoal: DailyGoalState = saved.dailyGoal || DEMO_STUDENT_ALEX.dailyGoal;
-        const isSameDay = savedGoal.lastGoalDate === todayStr;
-        const hydratedGoal: DailyGoalState = isSameDay
-          ? savedGoal
-          : {
-              ...savedGoal,
-              minutesPracticedToday: 0,
-              questionsAnsweredToday: 0,
-              lastGoalDate: todayStr,
-            };
-
-        return {
-          ...DEMO_STUDENT_ALEX,
-          ...saved,
-          dailyGoal: hydratedGoal,
-          consecutiveWrongByConcept:
-            saved.consecutiveWrongByConcept || DEMO_STUDENT_ALEX.consecutiveWrongByConcept || {},
-          teachBackRecords: Array.isArray(saved.teachBackRecords) ? saved.teachBackRecords : [],
-          socraticSessions: Array.isArray(saved.socraticSessions) ? saved.socraticSessions : [],
-          rescueEvents: Array.isArray(saved.rescueEvents) ? saved.rescueEvents : [],
-          learningJourney:
-            saved.learningJourney && saved.learningJourney.length > 0
-              ? saved.learningJourney
-              : DEMO_STUDENT_ALEX.learningJourney,
-          confidenceRecords:
-            saved.confidenceRecords && saved.confidenceRecords.length > 0
-              ? saved.confidenceRecords
-              : DEMO_STUDENT_ALEX.confidenceRecords,
-        };
+        return migrateLearnerProfile(JSON.parse(savedStr));
       }
     } catch (e) {
       console.error('Failed to load profile from storage:', e);
@@ -294,6 +351,7 @@ export const LearnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
       difficulty?: DifficultyLevel;
       questionTitle?: string;
       minutesSpent?: number;
+      responseTimeMs?: number;
     }
   ) => {
     const conceptMeta = CONCEPTS.find((c) => c.id === conceptId);
@@ -488,8 +546,22 @@ export const LearnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return re;
       });
 
+      const newMetric: PracticeAttemptMetric = {
+        id: `pm-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+        timestamp: new Date().toISOString(),
+        conceptId,
+        isCorrect,
+        responseTimeMs: Math.max(1500, extra?.responseTimeMs ?? 15000),
+        confidence,
+        difficulty: extra?.difficulty || 'medium',
+      };
+
+      const nextModelVersion = (prev.learnerModelVersion || 1) + 1;
+      const changeNote = `${conceptName} mastery updated to ${newScore}% (${delta > 0 ? '+' : ''}${delta}%)`;
+
       return {
         ...prev,
+        learnerModelVersion: nextModelVersion,
         overallMastery,
         totalQuestionsAnswered: prev.totalQuestionsAnswered + 1,
         dailyGoal: {
@@ -500,6 +572,14 @@ export const LearnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
         },
         consecutiveWrongByConcept: updatedConsecutiveWrong,
         rescueEvents: updatedRescueEvents,
+        practiceMetrics: [newMetric, ...(prev.practiceMetrics || []).slice(0, 29)],
+        examPlan: prev.examPlan
+          ? {
+              ...prev.examPlan,
+              needsUpdate: true,
+              lastModelChangeReason: changeNote,
+            }
+          : null,
         masteryByConcept: updatedMasteryByConcept,
         revisionSchedule: updatedSchedule,
         learningJourney: [timelineEvent, ...prev.learningJourney],
@@ -521,7 +601,8 @@ export const LearnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
     title: string,
     explanationSnippet: string,
     aiCorrection: string,
-    severity: 'high' | 'medium' | 'low'
+    severity: 'high' | 'medium' | 'low',
+    libraryEntryId?: string
   ) => {
     setProfile((prev) => {
       const existing = prev.misconceptions.find((m) => m.title.toLowerCase() === title.toLowerCase());
@@ -551,9 +632,22 @@ export const LearnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
         misconceptionTitle: title,
       };
 
+      const nextModelVersion = (prev.learnerModelVersion || 1) + 1;
+      const resolvedLibraryId =
+        libraryEntryId ||
+        matchMisconceptionLibrary(`${title} ${explanationSnippet}`, conceptId)?.id;
+
       if (existing) {
         return {
           ...prev,
+          learnerModelVersion: nextModelVersion,
+          examPlan: prev.examPlan
+            ? {
+                ...prev.examPlan,
+                needsUpdate: true,
+                lastModelChangeReason: `Recurring misconception flagged in ${conceptName}`,
+              }
+            : null,
           misconceptions: prev.misconceptions.map((m) =>
             m.id === existing.id
               ? {
@@ -561,6 +655,7 @@ export const LearnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
                   timesEncountered: m.timesEncountered + 1,
                   status: 'active' as const,
                   detectedAt: 'Just now',
+                  libraryEntryId: m.libraryEntryId || resolvedLibraryId,
                 }
               : m
           ),
@@ -579,10 +674,19 @@ export const LearnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
         status: 'active',
         detectedAt: 'Just now',
         timesEncountered: 1,
+        libraryEntryId: resolvedLibraryId,
       };
 
       return {
         ...prev,
+        learnerModelVersion: nextModelVersion,
+        examPlan: prev.examPlan
+          ? {
+              ...prev.examPlan,
+              needsUpdate: true,
+              lastModelChangeReason: `New misconception flagged: "${title}"`,
+            }
+          : null,
         misconceptions: [newMisconception, ...prev.misconceptions],
         learningJourney: [timelineEvent, ...prev.learningJourney],
       };
@@ -625,8 +729,17 @@ export const LearnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
         misconceptionTitle: target?.title,
       };
 
+      const nextModelVersion = (prev.learnerModelVersion || 1) + 1;
       return {
         ...prev,
+        learnerModelVersion: nextModelVersion,
+        examPlan: prev.examPlan
+          ? {
+              ...prev.examPlan,
+              needsUpdate: true,
+              lastModelChangeReason: `Misconception resolved: ${target?.title || 'Concept Trap'}`,
+            }
+          : null,
         misconceptions: prev.misconceptions.map((m) =>
           m.id === id ? { ...m, status: 'resolved' as const } : m
         ),
@@ -941,8 +1054,16 @@ export const LearnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       return {
         ...prev,
+        learnerModelVersion: (prev.learnerModelVersion || 1) + 1,
         overallMastery,
         totalQuestionsAnswered: prev.totalQuestionsAnswered + results.length,
+        examPlan: prev.examPlan
+          ? {
+              ...prev.examPlan,
+              needsUpdate: true,
+              lastModelChangeReason: `Diagnostic baseline updated (${overallMastery}% overall)`,
+            }
+          : null,
         dailyGoal: {
           ...baseGoal,
           minutesPracticedToday: (isSameGoalDay ? baseGoal.minutesPracticedToday : 0) + diagMinutes,
@@ -1094,8 +1215,16 @@ export const LearnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       return {
         ...prev,
+        learnerModelVersion: (prev.learnerModelVersion || 1) + 1,
         overallMastery,
         totalVoiceNotesCount: prev.totalVoiceNotesCount + 1,
+        examPlan: prev.examPlan
+          ? {
+              ...prev.examPlan,
+              needsUpdate: true,
+              lastModelChangeReason: `Teach It Back updated ${recordData.concept}`,
+            }
+          : null,
         dailyGoal: {
           ...baseGoal,
           minutesPracticedToday: (isSameGoalDay ? baseGoal.minutesPracticedToday : 0) + 3,
@@ -1211,9 +1340,17 @@ export const LearnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       return {
         ...prev,
+        learnerModelVersion: (prev.learnerModelVersion || 1) + 1,
         overallMastery,
         totalQuestionsAnswered:
           prev.totalQuestionsAnswered + (sessionData.practiceAnsweredCorrectly !== undefined ? 1 : 0),
+        examPlan: prev.examPlan
+          ? {
+              ...prev.examPlan,
+              needsUpdate: true,
+              lastModelChangeReason: `Socratic session updated ${sessionData.concept}`,
+            }
+          : null,
         dailyGoal: {
           ...baseGoal,
           minutesPracticedToday: (isSameGoalDay ? baseGoal.minutesPracticedToday : 0) + 4,
@@ -1399,8 +1536,16 @@ export const LearnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       return {
         ...prev,
+        learnerModelVersion: (prev.learnerModelVersion || 1) + 1,
         overallMastery,
         totalQuestionsAnswered: prev.totalQuestionsAnswered + 1,
+        examPlan: prev.examPlan
+          ? {
+              ...prev.examPlan,
+              needsUpdate: true,
+              lastModelChangeReason: `Concept Rescue outcome logged on ${target.concept}`,
+            }
+          : null,
         dailyGoal: {
           ...baseGoal,
           minutesPracticedToday: (isSameGoalDay ? baseGoal.minutesPracticedToday : 0) + 1,
@@ -1442,6 +1587,193 @@ export const LearnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
     );
   };
 
+  const saveExamPlan = (plan: ExamPlanState, logCreation = true) => {
+    const { dateFormatted, full } = formatTimestampNow();
+    setProfile((prev) => {
+      const journeyList = logCreation
+        ? [
+            {
+              id: `lj-ep-${Date.now()}`,
+              timestamp: full,
+              dateKey: dateFormatted,
+              eventType: 'exam_plan' as const,
+              concept: 'Exam Preparation',
+              conceptId: 'electricity-root',
+              title: `Exam Countdown Plan Generated (${plan.days.length} Days)`,
+              description: `Scheduled ${plan.selectedConceptIds.length} concepts toward exam date ${plan.examDateISO}.`,
+              studentAction: `Configured Exam Countdown Planner`,
+              aiInsight: `Mixed weak-concept drills ahead of spaced reviews calibrated to model v${prev.learnerModelVersion || 1}.`,
+            },
+            ...prev.learningJourney,
+          ]
+        : prev.learningJourney;
+
+      return {
+        ...prev,
+        examPlan: {
+          ...plan,
+          generatedAtModelVersion: prev.learnerModelVersion || 1,
+          needsUpdate: false,
+          lastModelChangeReason: undefined,
+        },
+        learningJourney: journeyList,
+      };
+    });
+
+    if (logCreation) {
+      addAgentLog(
+        'Revision Agent',
+        'Exam Countdown Scheduled',
+        `Built ${plan.days.length}-day exam countdown plan for ${plan.examDateISO}.`,
+        'purple'
+      );
+    }
+  };
+
+  const toggleExamPlanTask = (dayNumber: number, taskId: string) => {
+    setProfile((prev) => {
+      if (!prev.examPlan) return prev;
+      const updatedDays = prev.examPlan.days.map((d) =>
+        d.dayNumber === dayNumber
+          ? {
+              ...d,
+              tasks: d.tasks.map((t) =>
+                t.id === taskId ? { ...t, completed: !t.completed } : t
+              ),
+            }
+          : d
+      );
+      return {
+        ...prev,
+        examPlan: {
+          ...prev.examPlan,
+          days: updatedDays,
+        },
+      };
+    });
+  };
+
+  const awardMasteryBadge = (
+    badgeInput: Omit<MasteryBadge, 'id' | 'earnedAt'>
+  ): MasteryBadge => {
+    const { dateFormatted, full } = formatTimestampNow();
+    const newBadge: MasteryBadge = {
+      id: `badge-${badgeInput.conceptId}-${Date.now()}`,
+      earnedAt: dateFormatted,
+      ...badgeInput,
+    };
+
+    setProfile((prev) => {
+      const current = prev.masteryByConcept[badgeInput.conceptId];
+      const oldScore = current?.masteryPercentage ?? 80;
+      const bonusDelta = oldScore < 95 ? 5 : 2;
+      const newScore = Math.min(100, oldScore + bonusDelta);
+
+      const updatedMasteryByConcept = current
+        ? {
+            ...prev.masteryByConcept,
+            [badgeInput.conceptId]: {
+              ...current,
+              masteryPercentage: newScore,
+              questionsAttempted: current.questionsAttempted + badgeInput.totalQuestions,
+              questionsCorrect: current.questionsCorrect + badgeInput.correctCount,
+              lastStudiedDate: new Date().toISOString().split('T')[0],
+              status: 'mastered' as const,
+              trend: 'improving' as const,
+              history: [
+                {
+                  date: new Date().toISOString().split('T')[0],
+                  scoreDelta: bonusDelta,
+                  reason: `Mastery Badge Challenge (${badgeInput.correctCount}/${badgeInput.totalQuestions})`,
+                  newScore,
+                },
+                ...current.history,
+              ],
+            },
+          }
+        : prev.masteryByConcept;
+
+      const scores = Object.values(updatedMasteryByConcept).map((c) => c.masteryPercentage);
+      const overallMastery = Math.round(scores.reduce((a, b) => a + b, 0) / (scores.length || 1));
+
+      const filteredExistingBadges = (prev.masteryBadges || []).filter(
+        (b) => b.conceptId !== badgeInput.conceptId
+      );
+
+      const todayStr = new Date().toISOString().split('T')[0];
+      const baseGoal = prev.dailyGoal || DEMO_STUDENT_ALEX.dailyGoal;
+      const isSameGoalDay = baseGoal.lastGoalDate === todayStr;
+
+      const badgeEvent: import('../types/learning').LearningMemoryEvent = {
+        id: `lj-badge-${Date.now()}`,
+        timestamp: full,
+        dateKey: dateFormatted,
+        eventType: 'badge_earned',
+        concept: badgeInput.conceptName,
+        conceptId: badgeInput.conceptId,
+        title: `Mastery Badge Earned: ${badgeInput.conceptName}`,
+        description: `Passed the 5-question verification challenge (${badgeInput.correctCount}/${badgeInput.totalQuestions} · ${badgeInput.scorePercentage}%).`,
+        studentAction: `Completed multi-dimensional challenge (basic, application, misconception, real-world)`,
+        aiInsight: `Verified durable conceptual transfer across real-world and trap contexts.`,
+        masteryBefore: oldScore,
+        masteryAfter: newScore,
+      };
+
+      const nextModelVersion = (prev.learnerModelVersion || 1) + 1;
+
+      return {
+        ...prev,
+        learnerModelVersion: nextModelVersion,
+        overallMastery,
+        totalQuestionsAnswered: prev.totalQuestionsAnswered + badgeInput.totalQuestions,
+        dailyGoal: {
+          ...baseGoal,
+          minutesPracticedToday: (isSameGoalDay ? baseGoal.minutesPracticedToday : 0) + 5,
+          questionsAnsweredToday:
+            (isSameGoalDay ? baseGoal.questionsAnsweredToday : 0) + badgeInput.totalQuestions,
+          lastGoalDate: todayStr,
+        },
+        masteryByConcept: updatedMasteryByConcept,
+        masteryBadges: [newBadge, ...filteredExistingBadges],
+        examPlan: prev.examPlan
+          ? {
+              ...prev.examPlan,
+              needsUpdate: true,
+              lastModelChangeReason: `Mastery Badge earned in ${badgeInput.conceptName} (${newScore}%)`,
+            }
+          : null,
+        recentActivity: [
+          {
+            id: `act-badge-${Date.now()}`,
+            title: 'Mastery Badge Earned',
+            timestamp: 'Just now',
+            type: 'badge_earned',
+            conceptName: badgeInput.conceptName,
+            details: `Scored ${badgeInput.scorePercentage}% on 5-question verification challenge.`,
+          },
+          ...prev.recentActivity.slice(0, 9),
+        ],
+        learningJourney: [badgeEvent, ...prev.learningJourney],
+      };
+    });
+
+    addAgentLog(
+      'Learner Model Agent',
+      'Mastery Badge Awarded',
+      `Student passed ${badgeInput.conceptName} badge challenge (${badgeInput.scorePercentage}%).`,
+      'success'
+    );
+
+    return newBadge;
+  };
+
+  const markOnboardingComplete = (completed = true) => {
+    setProfile((prev) => ({
+      ...prev,
+      onboardingCompleted: completed,
+    }));
+  };
+
   return (
     <LearnerContext.Provider
       value={{
@@ -1449,6 +1781,9 @@ export const LearnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setRole,
         profile,
         agentLogs,
+        toasts,
+        showToast,
+        dismissToast,
         addAgentLog,
         updateConceptMastery,
         addMisconception,
@@ -1465,6 +1800,10 @@ export const LearnerProvider: React.FC<{ children: React.ReactNode }> = ({ child
         recordSocraticSession,
         recordRescueAttempt,
         resolveRescueOutcome,
+        saveExamPlan,
+        toggleExamPlanTask,
+        awardMasteryBadge,
+        markOnboardingComplete,
         activeTab,
         setActiveTab,
       }}
@@ -1481,3 +1820,4 @@ export const useLearner = () => {
   }
   return context;
 };
+

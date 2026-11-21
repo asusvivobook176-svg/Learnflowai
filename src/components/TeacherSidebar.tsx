@@ -74,7 +74,7 @@ export const TeacherSidebar: React.FC<TeacherSidebarProps> = ({ onOpenArchitectu
   ];
 
   return (
-    <aside className="w-64 shrink-0 hidden md:flex flex-col border-r border-slate-800 bg-slate-950/70 p-4 justify-between">
+    <aside className="no-print w-64 shrink-0 hidden md:flex flex-col border-r border-slate-800 bg-slate-950/70 p-4 justify-between">
       <div className="space-y-6">
         {/* Class Overview Pill Card */}
         <div className="p-3.5 rounded-2xl bg-gradient-to-br from-cyan-950/60 via-slate-900 to-slate-900 border border-cyan-500/30 shadow-lg shadow-cyan-950/30">

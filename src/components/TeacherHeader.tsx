@@ -27,7 +27,7 @@ export const TeacherHeader: React.FC<TeacherHeaderProps> = ({ onOpenArchitecture
 
   return (
     <>
-      <header className="sticky top-0 z-40 w-full border-b border-slate-800 bg-slate-950/80 backdrop-blur-md px-4 lg:px-6 py-3">
+      <header className="no-print sticky top-0 z-40 w-full border-b border-slate-800 bg-slate-950/80 backdrop-blur-md px-4 lg:px-6 py-3">
         <div className="flex items-center justify-between gap-4">
           {/* Brand & Class Identity */}
           <div className="flex items-center gap-3">
@@ -49,7 +49,7 @@ export const TeacherHeader: React.FC<TeacherHeaderProps> = ({ onOpenArchitecture
                     Teacher Command Center
                   </span>
                 </div>
-                <p className="hidden md:block text-[11px] text-slate-400 font-medium">
+                <p className="hidden md:block text-[11px] text-slate-300 font-medium">
                   Classroom Learning Intelligence &amp; Intervention System
                 </p>
               </div>
@@ -61,7 +61,7 @@ export const TeacherHeader: React.FC<TeacherHeaderProps> = ({ onOpenArchitecture
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-xs text-slate-300">
               <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
               <span className="font-semibold text-white">{TEACHER_CLASS_DATA.className}</span>
-              <span className="text-slate-500">•</span>
+              <span className="text-slate-400">•</span>
               <span className="text-cyan-300">{TEACHER_CLASS_DATA.totalStudents} Students Enrolled</span>
             </div>
 

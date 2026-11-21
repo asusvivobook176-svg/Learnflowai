@@ -254,10 +254,12 @@ app.post('/api/evaluate-reasoning', async (req: Request, res: Response) => {
     selectedOptionText,
     correctOptionText,
     isCorrect,
-    studentReasoning,
+    studentReasoning: rawStudentReasoning,
+    spokenReasoning,
     conceptName = 'Electricity',
     confidence = 'medium',
   } = req.body;
+  const studentReasoning = rawStudentReasoning || spokenReasoning || '';
 
   const fallbackReasoning = () => {
     const text = (studentReasoning || '').toLowerCase();
@@ -273,10 +275,18 @@ app.post('/api/evaluate-reasoning', async (req: Request, res: Response) => {
     let causalLogic = isActuallyCorrect ? 85 : 40;
     let formulaApplication = isActuallyCorrect ? 86 : 45;
 
-    if (text.includes('eat') || text.includes('used up') || text.includes('first resistor gets more')) {
+    if (
+      text.includes('eat') ||
+      text.includes('used up') ||
+      text.includes('uses up') ||
+      text.includes('consum') ||
+      text.includes('gets less') ||
+      text.includes('smaller current') ||
+      text.includes('first resistor gets more')
+    ) {
       errorType = 'conceptual_misconception';
       misconception = {
-        title: 'Current Consumption Misconception',
+        title: 'Current Gets Used Up by a Resistor',
         description: 'Believing electric current is consumed or depleted along the circuit path.',
         howToCorrect: 'Recall that in a single loop, rate of charge flow (Amperes) must be equal at every point due to conservation of charge.',
         severity: 'high' as const,
@@ -286,6 +296,41 @@ app.post('/api/evaluate-reasoning', async (req: Request, res: Response) => {
       conceptualAccuracy = 25;
       causalLogic = 30;
       delta = -10;
+    } else if (
+      text.includes('parallel add') ||
+      text.includes('resistors in parallel add') ||
+      text.includes('increases total resistance') ||
+      text.includes('20 ohm')
+    ) {
+      errorType = 'conceptual_misconception';
+      misconception = {
+        title: 'Parallel Resistors Add Up Directly',
+        description: 'Adding parallel branch resistances directly (R1 + R2) instead of reciprocals (1/R1 + 1/R2).',
+        howToCorrect: 'Adding parallel branches opens extra pathways for charge, so total resistance decreases: 1/Rp = 1/R1 + 1/R2.',
+        severity: 'high' as const,
+      };
+      flawedAssumptions.push('Applied series resistance formula R1 + R2 to a parallel network');
+      missingKnowledge.push('Reciprocal resistance law for parallel branches');
+      conceptualAccuracy = 28;
+      causalLogic = 32;
+      delta = -10;
+    } else if (
+      text.includes('voltage splits') ||
+      text.includes('voltage divides') ||
+      text.includes('used up in parallel')
+    ) {
+      errorType = 'conceptual_misconception';
+      misconception = {
+        title: 'Voltage Divides Across Parallel Branches',
+        description: 'Assuming battery voltage splits between parallel branches.',
+        howToCorrect: 'Every parallel branch connects directly across the same source terminals, receiving full supply voltage while current splits.',
+        severity: 'medium' as const,
+      };
+      flawedAssumptions.push('Treated parallel potential difference as divided like a series loop');
+      missingKnowledge.push('Parallel branches share identical potential difference');
+      conceptualAccuracy = 32;
+      causalLogic = 36;
+      delta = -8;
     } else if (
       (text.includes('current increases') && text.includes('resistance increases')) ||
       text.includes('directly proportional')
@@ -336,6 +381,33 @@ app.post('/api/evaluate-reasoning', async (req: Request, res: Response) => {
       ? 68
       : 32;
 
+    const LIBRARY_MATCHERS: { id: string; conceptId: string; keywords: string[] }[] = [
+      { id: 'lib-1', conceptId: 'series-circuits', keywords: ['used up', 'uses up', 'eat', 'consum', 'gets less', 'first resistor gets more', 'smaller current'] },
+      { id: 'lib-2', conceptId: 'parallel-circuits', keywords: ['parallel add', 'resistors in parallel add', 'increases total resistance', '20 ohm'] },
+      { id: 'lib-3', conceptId: 'voltage', keywords: ['voltage flows', 'volts flow', 'voltmeter in series'] },
+      { id: 'lib-4', conceptId: 'ohms-law', keywords: ['current increases', 'resistance increases current', 'directly proportional'] },
+      { id: 'lib-5', conceptId: 'ohms-law', keywords: ['resistance increases voltage', 'more resistance makes more volts', 'battery gives more volts'] },
+      { id: 'lib-6', conceptId: 'parallel-circuits', keywords: ['voltage splits', 'voltage divides', 'used up in parallel', '6v'] },
+      { id: 'lib-7', conceptId: 'series-circuits', keywords: ['other bulbs stay on', 'first bulb stays lit'] },
+      { id: 'lib-8', conceptId: 'resistance', keywords: ['thicker wire', 'area increases resistance'] },
+      { id: 'lib-9', conceptId: 'resistance', keywords: ['double length', '40 ohm', 'area unchanged'] },
+      { id: 'lib-10', conceptId: 'electrical-power', keywords: ['always brighter', 'high resistance always'] },
+      { id: 'lib-11', conceptId: 'electrical-power', keywords: ['watt is energy', 'kwh is power', '60000 kwh'] },
+      { id: 'lib-12', conceptId: 'electric-current', keywords: ['60 a', 'divided by 5 minutes'] },
+    ];
+
+    const matchLibraryId = (text: string): string | undefined => {
+      const lower = (text || '').toLowerCase();
+      for (const entry of LIBRARY_MATCHERS) {
+        if (entry.keywords.some((kw) => lower.includes(kw))) {
+          return entry.id;
+        }
+      }
+      return undefined;
+    };
+
+    const matchedLibId = misconception ? matchLibraryId(`${studentReasoning || ''} ${misconception.title || ''}`) : undefined;
+
     return {
       isCorrect: isActuallyCorrect,
       reasoningScore,
@@ -348,7 +420,9 @@ app.post('/api/evaluate-reasoning', async (req: Request, res: Response) => {
       correctConceptsUsed,
       flawedAssumptions,
       missingKnowledge,
-      detectedMisconception: misconception,
+      detectedMisconception: misconception
+        ? { ...misconception, libraryEntryId: matchedLibId }
+        : null,
       supportiveFeedback: isActuallyCorrect
         ? 'Great job selecting the right answer! Your intuition and physics reasoning are aligned. Keep practicing higher-tier problems to lock in mastery.'
         : errorType === 'calculation_mistake'
@@ -387,74 +461,87 @@ Distinguish strictly between:
 
 Compute a mastery delta (-12 to +15) based on correctness, errorType, and reasoning depth (calculation_mistake gets a gentle -3 penalty, conceptual_misconception gets -8 to -12).`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-4-hydrogen',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            isCorrect: { type: Type.BOOLEAN },
-            reasoningScore: { type: Type.NUMBER, description: '0 to 100 score of reasoning depth' },
-            errorType: {
-              type: Type.STRING,
-              enum: ['none', 'conceptual_misconception', 'calculation_mistake', 'incomplete_explanation'],
-            },
-            rubricScores: {
-              type: Type.OBJECT,
-              properties: {
-                conceptualAccuracy: { type: Type.NUMBER },
-                causalLogic: { type: Type.NUMBER },
-                formulaApplication: { type: Type.NUMBER },
+    const response = await withTimeout(
+      ai.models.generateContent({
+        model: 'gemini-4-hydrogen',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              isCorrect: { type: Type.BOOLEAN },
+              reasoningScore: { type: Type.NUMBER, description: '0 to 100 score of reasoning depth' },
+              errorType: {
+                type: Type.STRING,
+                enum: ['none', 'conceptual_misconception', 'calculation_mistake', 'incomplete_explanation'],
               },
-              required: ['conceptualAccuracy', 'causalLogic', 'formulaApplication'],
-            },
-            correctConceptsUsed: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-            },
-            flawedAssumptions: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-            },
-            missingKnowledge: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-            },
-            detectedMisconception: {
-              type: Type.OBJECT,
-              nullable: true,
-              properties: {
-                title: { type: Type.STRING },
-                description: { type: Type.STRING },
-                howToCorrect: { type: Type.STRING },
-                severity: { type: Type.STRING, enum: ['high', 'medium', 'low'] },
+              rubricScores: {
+                type: Type.OBJECT,
+                properties: {
+                  conceptualAccuracy: { type: Type.NUMBER },
+                  causalLogic: { type: Type.NUMBER },
+                  formulaApplication: { type: Type.NUMBER },
+                },
+                required: ['conceptualAccuracy', 'causalLogic', 'formulaApplication'],
               },
+              correctConceptsUsed: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+              },
+              flawedAssumptions: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+              },
+              missingKnowledge: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+              },
+              detectedMisconception: {
+                type: Type.OBJECT,
+                nullable: true,
+                properties: {
+                  title: { type: Type.STRING },
+                  description: { type: Type.STRING },
+                  howToCorrect: { type: Type.STRING },
+                  severity: { type: Type.STRING, enum: ['high', 'medium', 'low'] },
+                },
+              },
+              supportiveFeedback: { type: Type.STRING },
+              masteryDelta: { type: Type.NUMBER },
+              recommendedConcept: { type: Type.STRING },
+              recommendedDifficulty: { type: Type.STRING, enum: ['easy', 'medium', 'hard'] },
             },
-            supportiveFeedback: { type: Type.STRING },
-            masteryDelta: { type: Type.NUMBER },
-            recommendedConcept: { type: Type.STRING },
-            recommendedDifficulty: { type: Type.STRING, enum: ['easy', 'medium', 'hard'] },
+            required: [
+              'isCorrect',
+              'reasoningScore',
+              'errorType',
+              'rubricScores',
+              'correctConceptsUsed',
+              'flawedAssumptions',
+              'missingKnowledge',
+              'supportiveFeedback',
+              'masteryDelta',
+              'recommendedConcept',
+              'recommendedDifficulty',
+            ],
           },
-          required: [
-            'isCorrect',
-            'reasoningScore',
-            'errorType',
-            'rubricScores',
-            'correctConceptsUsed',
-            'flawedAssumptions',
-            'missingKnowledge',
-            'supportiveFeedback',
-            'masteryDelta',
-            'recommendedConcept',
-            'recommendedDifficulty',
-          ],
         },
-      },
-    });
+      }),
+      8000
+    );
 
     const parsed = JSON.parse(response.text || '{}');
+    if (parsed?.detectedMisconception) {
+      const combined = `${studentReasoning || ''} ${parsed.detectedMisconception.title || ''} ${parsed.detectedMisconception.description || ''}`.toLowerCase();
+      if (combined.includes('used up') || combined.includes('consum')) parsed.detectedMisconception.libraryEntryId = 'lib-1';
+      else if (combined.includes('parallel') && combined.includes('add')) parsed.detectedMisconception.libraryEntryId = 'lib-2';
+      else if (combined.includes('voltage') && combined.includes('flow')) parsed.detectedMisconception.libraryEntryId = 'lib-3';
+      else if (combined.includes('current increases') && combined.includes('resistance')) parsed.detectedMisconception.libraryEntryId = 'lib-4';
+      else if (combined.includes('battery') || combined.includes('source voltage')) parsed.detectedMisconception.libraryEntryId = 'lib-5';
+      else if (combined.includes('parallel') && (combined.includes('divide') || combined.includes('split'))) parsed.detectedMisconception.libraryEntryId = 'lib-6';
+      else if (combined.includes('stretch')) parsed.detectedMisconception.libraryEntryId = 'lib-9';
+    }
     return res.json(parsed);
   } catch (err) {
     console.warn('Gemini reasoning evaluation error, using fallback:', err);
@@ -1343,6 +1430,467 @@ Also return a targeted "easy" 4-option checkpointQuestion (opt-a, opt-b, opt-c, 
   } catch (err) {
     console.warn('Gemini concept rescue error, using fallback:', err);
     return res.json(fallbackRescue('Live AI tutor is temporarily unavailable; loaded structured offline Concept Rescue guide.'));
+  }
+});
+
+// Helper: Validate Teacher Generated Revision Lab JSON
+function isValidGeneratedLabShape(obj: any): boolean {
+  return (
+    obj &&
+    typeof obj === 'object' &&
+    typeof obj.title === 'string' &&
+    obj.title.trim().length > 0 &&
+    typeof obj.concept === 'string' &&
+    typeof obj.shortExplanation === 'string' &&
+    obj.shortExplanation.trim().length > 0 &&
+    typeof obj.relatedMisconception === 'string' &&
+    Array.isArray(obj.practiceQuestions) &&
+    obj.practiceQuestions.length === 3 &&
+    obj.practiceQuestions.every(
+      (q: any) =>
+        q &&
+        typeof q.questionText === 'string' &&
+        Array.isArray(q.options) &&
+        q.options.length >= 2 &&
+        typeof q.correctOptionId === 'string' &&
+        typeof q.explanation === 'string'
+    )
+  );
+}
+
+// 7. Teacher Revision Lab Generator Endpoint
+app.post('/api/teacher/generate-lab', async (req: Request, res: Response) => {
+  const {
+    alertId = '',
+    concept = 'Series Circuits',
+    title = 'Concept Cluster Alert',
+    misconceptionSummary = 'Students hold a conceptual misconception on this topic.',
+    impactedCount = 10,
+  } = req.body;
+
+  const fallbackLab = (notice?: string) => ({
+    id: `gen-lab-${Date.now()}`,
+    alertId,
+    title: `Targeted Revision Lab: ${concept}`,
+    concept,
+    shortExplanation: `In ${concept}, start with physical conservation rules before plugging numbers into equations. Compare meters across circuit points to observe why ${misconceptionSummary.toLowerCase()}`,
+    relatedMisconception: misconceptionSummary,
+    practiceQuestions: [
+      {
+        id: `lab-q1-${Date.now()}`,
+        questionText: `Concept Check (Foundation): In ${concept}, what physical quantity stays constant across identical supply terminals or a single unbranched loop?`,
+        options: [
+          { id: 'opt-a', text: 'Current in a single series loop; Voltage across parallel branches' },
+          { id: 'opt-b', text: 'Current shrinks after every resistor in series' },
+          { id: 'opt-c', text: 'Voltage shrinks equally across parallel branches' },
+          { id: 'opt-d', text: 'Resistance doubles automatically when battery voltage doubles' },
+        ],
+        correctOptionId: 'opt-a',
+        explanation: 'Charge conservation guarantees identical series current; identical node pairs guarantee full parallel voltage.',
+      },
+      {
+        id: `lab-q2-${Date.now()}`,
+        questionText: `Numerical Drill (${concept}): A 12 V battery powers two resistors (4 Ω and 8 Ω). If connected in series, what is the current reading after the 8 Ω resistor?`,
+        options: [
+          { id: 'opt-a', text: '1.0 A (same as before the 4 Ω resistor)' },
+          { id: 'opt-b', text: '3.0 A before and 1.5 A after' },
+          { id: 'opt-c', text: '0 A (current used up)' },
+          { id: 'opt-d', text: '1.5 A total' },
+        ],
+        correctOptionId: 'opt-a',
+        explanation: 'Rs = 4 + 8 = 12 Ω, so I = 12 V / 12 Ω = 1.0 A at every point in the loop.',
+      },
+      {
+        id: `lab-q3-${Date.now()}`,
+        questionText: `Diagnostic Transfer (${concept}): If a third parallel branch is opened across a fixed 12 V supply, how does total current drawn from the battery change?`,
+        options: [
+          { id: 'opt-a', text: 'Total current increases because equivalent resistance decreases' },
+          { id: 'opt-b', text: 'Total current decreases because resistors add up' },
+          { id: 'opt-c', text: 'Battery voltage triples to compensate' },
+          { id: 'opt-d', text: 'Existing branches go dark' },
+        ],
+        correctOptionId: 'opt-a',
+        explanation: 'Adding a parallel pathway lowers total resistance Rp and adds a new branch current I3, increasing total current drawn.',
+      },
+    ],
+    usedFallback: true,
+    fallbackNotice: notice || null,
+  });
+
+  if (!ai) {
+    return res.json(fallbackLab('Live AI service is offline; generated structured offline Revision Lab.'));
+  }
+
+  try {
+    const prompt = `You are a Class 10 Physics Curriculum Designer helping Dr. Priya Sharma address a class-wide struggle alert.
+Alert Title: "${title}"
+Concept: "${concept}"
+Cohort Impact: ${impactedCount} students
+Observed Misconception: "${misconceptionSummary}"
+
+Generate a focused Revision Lab as strict JSON with:
+- title: concise lab title for ${concept}
+- concept: "${concept}"
+- shortExplanation: 2-3 clear sentences directly debunking the misconception for classroom walkthrough
+- relatedMisconception: clear 1-sentence statement of the underlying student misconception
+- practiceQuestions: EXACTLY 3 multiple-choice questions (ids: q1, q2, q3), each with questionText, 4 options (opt-a, opt-b, opt-c, opt-d), correctOptionId, and explanation.`;
+
+    const response = await withTimeout(
+      ai.models.generateContent({
+        model: 'gemini-4-hydrogen',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING },
+              concept: { type: Type.STRING },
+              shortExplanation: { type: Type.STRING },
+              relatedMisconception: { type: Type.STRING },
+              practiceQuestions: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    id: { type: Type.STRING },
+                    questionText: { type: Type.STRING },
+                    options: {
+                      type: Type.ARRAY,
+                      items: {
+                        type: Type.OBJECT,
+                        properties: {
+                          id: { type: Type.STRING },
+                          text: { type: Type.STRING },
+                        },
+                        required: ['id', 'text'],
+                      },
+                    },
+                    correctOptionId: { type: Type.STRING },
+                    explanation: { type: Type.STRING },
+                  },
+                  required: ['id', 'questionText', 'options', 'correctOptionId', 'explanation'],
+                },
+              },
+            },
+            required: ['title', 'concept', 'shortExplanation', 'relatedMisconception', 'practiceQuestions'],
+          },
+        },
+      }),
+      8000
+    );
+
+    const parsed = JSON.parse(response.text || '{}');
+    if (!isValidGeneratedLabShape(parsed)) {
+      return res.json(fallbackLab('AI lab format was incomplete; switched to validated classroom template.'));
+    }
+
+    return res.json({
+      id: `gen-lab-${Date.now()}`,
+      alertId,
+      ...parsed,
+      usedFallback: false,
+    });
+  } catch (err) {
+    console.warn('Gemini generate-lab error, using fallback:', err);
+    return res.json(fallbackLab('Live AI lab generator timed out; loaded structured Revision Lab.'));
+  }
+});
+
+// Helper: Validate 5-Question Mastery Badge Challenge
+function isValidMasteryChallengeShape(obj: any): boolean {
+  return (
+    obj &&
+    typeof obj === 'object' &&
+    Array.isArray(obj.questions) &&
+    obj.questions.length === 5 &&
+    obj.questions.every(
+      (q: any) =>
+        q &&
+        typeof q.questionText === 'string' &&
+        Array.isArray(q.options) &&
+        q.options.length >= 2 &&
+        typeof q.correctOptionId === 'string' &&
+        typeof q.explanation === 'string'
+    )
+  );
+}
+
+// 8. Mastery Badge 5-Question Verification Challenge Endpoint
+app.post('/api/mastery-challenge', async (req: Request, res: Response) => {
+  const { conceptId = 'ohms-law', conceptName = "Ohm's Law" } = req.body;
+
+  const fallbackChallenge = (notice?: string) => {
+    const banks: Record<string, any[]> = {
+      'ohms-law': [
+        {
+          id: 'mc-ohm-1',
+          conceptId: 'ohms-law',
+          conceptName: "Ohm's Law",
+          difficulty: 'easy',
+          dimension: 'basic',
+          questionText: '[Basic] At constant temperature, what is the mathematical relationship stated by Ohm\'s Law between potential difference V and current I?',
+          options: [
+            { id: 'opt-a', text: 'V = I × R (V is directly proportional to I)' },
+            { id: 'opt-b', text: 'V = I / R' },
+            { id: 'opt-c', text: 'I = V × R' },
+            { id: 'opt-d', text: 'R = V × I' },
+          ],
+          correctOptionId: 'opt-a',
+          explanation: 'Ohm\'s law states V ∝ I at constant physical conditions, with constant of proportionality R (V = IR).',
+          keyTakeaway: 'Slope of a V-vs-I linear plot gives resistance R.',
+        },
+        {
+          id: 'mc-ohm-2',
+          conceptId: 'ohms-law',
+          conceptName: "Ohm's Law",
+          difficulty: 'medium',
+          dimension: 'application',
+          questionText: '[Application] A toaster heating element draws 5.0 A when connected to a 220 V supply. What is its operating resistance?',
+          options: [
+            { id: 'opt-a', text: '44 Ω' },
+            { id: 'opt-b', text: '1100 Ω' },
+            { id: 'opt-c', text: '215 Ω' },
+            { id: 'opt-d', text: '0.023 Ω' },
+          ],
+          correctOptionId: 'opt-a',
+          explanation: 'R = V / I = 220 V / 5.0 A = 44 Ω.',
+          keyTakeaway: 'Always rearrange V = IR carefully: R = V / I.',
+        },
+        {
+          id: 'mc-ohm-3',
+          conceptId: 'ohms-law',
+          conceptName: "Ohm's Law",
+          difficulty: 'medium',
+          dimension: 'misconception',
+          questionText: '[Misconception Trap] You swap a 4 Ω resistor on a 12 V battery for a 12 Ω resistor at constant temperature. Which statement is true?',
+          options: [
+            { id: 'opt-a', text: 'Battery voltage remains 12 V and current drops from 3 A to 1 A' },
+            { id: 'opt-b', text: 'Battery voltage triples to 36 V to maintain 3 A current' },
+            { id: 'opt-c', text: 'Current triples from 3 A to 9 A' },
+            { id: 'opt-d', text: 'The resistor forces its own resistance down to match 12 V' },
+          ],
+          correctOptionId: 'opt-a',
+          explanation: 'Battery EMF stays fixed at 12 V; raising R cuts current proportionally (I = V/R = 1 A).',
+          keyTakeaway: 'Increasing resistance never increases ideal source voltage.',
+        },
+        {
+          id: 'mc-ohm-4',
+          conceptId: 'ohms-law',
+          conceptName: "Ohm's Law",
+          difficulty: 'hard',
+          dimension: 'real-world',
+          questionText: '[Real-World] Two metallic wires X and Y are tested on a V-I graph (V on vertical axis, I on horizontal axis). Wire X has a steeper slope than Wire Y. Which wire is better suited for low-loss power transmission cables?',
+          options: [
+            { id: 'opt-a', text: 'Wire Y, because a gentler V-I slope means lower electrical resistance' },
+            { id: 'opt-b', text: 'Wire X, because steeper slope means zero resistance' },
+            { id: 'opt-c', text: 'Wire X, because steeper slope carries higher current per volt' },
+            { id: 'opt-d', text: 'Both have equal resistance' },
+          ],
+          correctOptionId: 'opt-a',
+          explanation: 'On a V-versus-I graph, slope = ΔV / ΔI = R. Wire Y\'s flatter slope gives lower resistance and less I²R heat loss.',
+          keyTakeaway: 'Check graph axes first: R = V/I (slope when V is y-axis).',
+        },
+        {
+          id: 'mc-ohm-5',
+          conceptId: 'ohms-law',
+          conceptName: "Ohm's Law",
+          difficulty: 'medium',
+          dimension: 'application',
+          questionText: '[Application] A thermistor shows a current of 0.4 A at 8 V and 1.2 A at 16 V because it heats up. Does it strictly obey Ohm\'s law across this range?',
+          options: [
+            { id: 'opt-a', text: 'No, because R changed from 20 Ω to 13.3 Ω as temperature varied (non-ohmic)' },
+            { id: 'opt-b', text: 'Yes, because current increased when voltage increased' },
+            { id: 'opt-c', text: 'Yes, because V = IR holds with constant R' },
+            { id: 'opt-d', text: 'No, because voltage exceeded 10 V' },
+          ],
+          correctOptionId: 'opt-a',
+          explanation: 'Ohmic behavior requires constant R (and constant temperature); changing V/I ratio means it is non-ohmic.',
+          keyTakeaway: 'Ohm\'s law holds only when the V/I ratio stays constant.',
+        },
+      ],
+    };
+
+    const selectedList =
+      banks[conceptId] ||
+      [
+        {
+          id: `mc-${conceptId}-1`,
+          conceptId,
+          conceptName,
+          difficulty: 'easy',
+          dimension: 'basic',
+          questionText: `[Basic] Which foundational principle defines ${conceptName} in Class 10 Electricity?`,
+          options: [
+            { id: 'opt-a', text: 'Conservation of electric charge and energy across circuit elements' },
+            { id: 'opt-b', text: 'Consumption of electrons inside passive resistors' },
+            { id: 'opt-c', text: 'Voltage flowing one-way from resistors back to the battery' },
+            { id: 'opt-d', text: 'Resistance varying freely with battery brand' },
+          ],
+          correctOptionId: 'opt-a',
+          explanation: `${conceptName} obeys charge conservation and energy transfer laws consistently.`,
+          keyTakeaway: 'Anchor every circuit formula in conservation laws.',
+        },
+        {
+          id: `mc-${conceptId}-2`,
+          conceptId,
+          conceptName,
+          difficulty: 'medium',
+          dimension: 'application',
+          questionText: `[Application] ${(FALLBACK_QUESTIONS_BY_CONCEPT[conceptId] || FALLBACK_QUESTIONS_BY_CONCEPT['ohms-law']).questionText}`,
+          options: (FALLBACK_QUESTIONS_BY_CONCEPT[conceptId] || FALLBACK_QUESTIONS_BY_CONCEPT['ohms-law']).options,
+          correctOptionId: (FALLBACK_QUESTIONS_BY_CONCEPT[conceptId] || FALLBACK_QUESTIONS_BY_CONCEPT['ohms-law']).correctOptionId,
+          explanation: (FALLBACK_QUESTIONS_BY_CONCEPT[conceptId] || FALLBACK_QUESTIONS_BY_CONCEPT['ohms-law']).explanation,
+          keyTakeaway: (FALLBACK_QUESTIONS_BY_CONCEPT[conceptId] || FALLBACK_QUESTIONS_BY_CONCEPT['ohms-law']).keyTakeaway,
+        },
+        {
+          id: `mc-${conceptId}-3`,
+          conceptId,
+          conceptName,
+          difficulty: 'medium',
+          dimension: 'misconception',
+          questionText: `[Misconception Trap] A student claims: "Charges lose speed and disappear after lighting a bulb, so current leaves smaller than it enters." Why is this false?`,
+          options: [
+            { id: 'opt-a', text: 'Energy transfers to light/heat, but total charge flow (Amperes) is conserved' },
+            { id: 'opt-b', text: 'Bulbs generate new electrons inside the tungsten filament' },
+            { id: 'opt-c', text: 'Voltmeters absorb extra electrons' },
+            { id: 'opt-d', text: 'Current only flows during the first second after closing the switch' },
+          ],
+          correctOptionId: 'opt-a',
+          explanation: 'Electrical potential energy drops across loads, while charge flow rate (I) in a single path stays constant.',
+          keyTakeaway: 'Loads transform electrical energy, not electric charge.',
+        },
+        {
+          id: `mc-${conceptId}-4`,
+          conceptId,
+          conceptName,
+          difficulty: 'hard',
+          dimension: 'real-world',
+          questionText: `[Real-World] Why are household lighting and appliance outlets wired in parallel rather than series?`,
+          options: [
+            { id: 'opt-a', text: 'Each appliance receives full mains voltage and operates independently if another switches off' },
+            { id: 'opt-b', text: 'Parallel wiring maximizes total circuit resistance to save fuses' },
+            { id: 'opt-c', text: 'Series wiring supplies too much current to distant rooms' },
+            { id: 'opt-d', text: 'Parallel wiring splits 220 V into safer 22 V branches' },
+          ],
+          correctOptionId: 'opt-a',
+          explanation: 'Parallel sockets guarantee each device gets full supply voltage and independent switching.',
+          keyTakeaway: 'Household circuits rely on parallel nodes for constant voltage & independent control.',
+        },
+        {
+          id: `mc-${conceptId}-5`,
+          conceptId,
+          conceptName,
+          difficulty: 'hard',
+          dimension: 'application',
+          questionText: `[Application] A 24 V source drives two resistors (6 Ω and 6 Ω). Compare total power drawn if connected in parallel vs. series:`,
+          options: [
+            { id: 'opt-a', text: 'Parallel draws 4× the power of series because Rp = R/2 vs Rs = 2R' },
+            { id: 'opt-b', text: 'Both connections draw identical power' },
+            { id: 'opt-c', text: 'Series draws more power because voltage adds up' },
+            { id: 'opt-d', text: 'Parallel draws half the power of series' },
+          ],
+          correctOptionId: 'opt-a',
+          explanation: 'Rp = 3 Ω (P = 24²/3 = 192 W), whereas Rs = 12 Ω (P = 24²/12 = 48 W): 192 / 48 = 4×.',
+          keyTakeaway: 'Lowering equivalent resistance at constant voltage sharply increases power drawn (P = V²/Req).',
+        },
+      ];
+
+    return {
+      conceptId,
+      conceptName,
+      questions: selectedList,
+      usedFallback: true,
+      fallbackNotice: notice || null,
+    };
+  };
+
+  if (!ai) {
+    return res.json(fallbackChallenge('Live AI service is offline; loaded verified 5-question mastery challenge.'));
+  }
+
+  try {
+    const prompt = `Generate a 5-question Mastery Badge Verification Challenge for Class 10 Physics: "${conceptName}" (conceptId: ${conceptId}).
+Include EXACTLY 5 multiple-choice questions covering all 4 dimensions:
+- Question 1: dimension "basic" (easy core definition)
+- Question 2: dimension "application" (medium numerical problem)
+- Question 3: dimension "misconception" (medium/hard common misconception trap distractor)
+- Question 4: dimension "real-world" (hard everyday appliance/circuit application)
+- Question 5: dimension "application" (hard multi-step transfer)
+
+Each question must use option ids "opt-a", "opt-b", "opt-c", "opt-d" and include id, conceptId ("${conceptId}"), conceptName ("${conceptName}"), difficulty, dimension, questionText, options, correctOptionId, explanation, and keyTakeaway.`;
+
+    const response = await withTimeout(
+      ai.models.generateContent({
+        model: 'gemini-4-hydrogen',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              questions: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    id: { type: Type.STRING },
+                    conceptId: { type: Type.STRING },
+                    conceptName: { type: Type.STRING },
+                    difficulty: { type: Type.STRING, enum: ['easy', 'medium', 'hard'] },
+                    dimension: { type: Type.STRING, enum: ['basic', 'application', 'misconception', 'real-world'] },
+                    questionText: { type: Type.STRING },
+                    options: {
+                      type: Type.ARRAY,
+                      items: {
+                        type: Type.OBJECT,
+                        properties: {
+                          id: { type: Type.STRING },
+                          text: { type: Type.STRING },
+                        },
+                        required: ['id', 'text'],
+                      },
+                    },
+                    correctOptionId: { type: Type.STRING },
+                    explanation: { type: Type.STRING },
+                    keyTakeaway: { type: Type.STRING },
+                  },
+                  required: [
+                    'id',
+                    'conceptId',
+                    'conceptName',
+                    'difficulty',
+                    'dimension',
+                    'questionText',
+                    'options',
+                    'correctOptionId',
+                    'explanation',
+                    'keyTakeaway',
+                  ],
+                },
+              },
+            },
+            required: ['questions'],
+          },
+        },
+      }),
+      8000
+    );
+
+    const parsed = JSON.parse(response.text || '{}');
+    if (!isValidMasteryChallengeShape(parsed)) {
+      return res.json(fallbackChallenge('AI challenge payload was incomplete; loaded verified 5-question challenge.'));
+    }
+
+    return res.json({
+      conceptId,
+      conceptName,
+      questions: parsed.questions,
+      usedFallback: false,
+    });
+  } catch (err) {
+    console.warn('Gemini mastery challenge error, using fallback:', err);
+    return res.json(fallbackChallenge('Live AI challenge generator timed out; loaded verified 5-question challenge.'));
   }
 });
 

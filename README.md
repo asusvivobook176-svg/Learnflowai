@@ -218,6 +218,45 @@ $$\Delta M = \text{BaseOutcome} \times W_{\text{difficulty}} + \text{ReasoningSc
 
 ---
 
+## 🚀 LearnFlow AI 2.0 Intelligence & Classroom Suite
+
+### 1. Misconception Library (12 Class 10 Physics – Electricity Entries)
+- Curated diagnostic reference in **Misconceptions → Misconception Library** covering traps such as *"Current Gets Used Up by a Resistor"*, *"Parallel Resistors Add Up Directly"*, and *"Voltage Divides Across Parallel Branches"*.
+- Each entry includes an `exampleStudentPhrase`, conceptual physics `explanation`, and `correctivePractice`.
+- When reasoning evaluation detects a match (`/api/evaluate-reasoning`), it links directly to `libraryEntryId` and displays the corrective drill.
+
+### 2. Difficulty Calibrator
+- Deterministic calibration engine (`calibrateNextDifficulty`) evaluates recent accuracy, response time (`responseTimeMs`), self-reported confidence, and concept mastery.
+- Automatically selects `easy`, `medium`, or `hard` questions and surfaces a transparent **"Why this difficulty?"** line above every adaptive practice prompt.
+
+### 3. Prerequisite Path & Interactive Concept Graph
+- Syllabus concepts track upstream dependencies (`CONCEPTS[].prerequisites`, e.g., *Resistance → Ohm's Law → Series Circuits*).
+- When a concept struggles because an upstream prerequisite is below `60%`, Adaptive Practice and Concept Graph recommend the prerequisite first and highlight the dependency chain in rose/indigo.
+- Concept Graph supports **pointer-drag pan, arrow-pad navigation, zoom controls (`75%–140%`), keyboard focus navigation, and an inspection drawer**.
+
+### 4. Exam Countdown Planner & Model-Sync Alerts
+- Students choose an exam date and syllabus concepts in **Exam Planner** (`exam-planner`) to build a day-by-day schedule blending weak-concept drills and spaced reviews.
+- Whenever learner mastery or misconceptions mutate (`learnerModelVersion`), any existing plan sets `needsUpdate: true` and displays a **"Plan Updated Alert — Your Learner Model Changed"** banner with a **1-click "Re-sync Plan Now"** button.
+
+### 5. Exam Readiness Score (`0–100`)
+- Deterministic 4-component breakdown across **Concept Mastery (40 pts)**, **Retention Recency (20 pts)**, **Open Misconceptions (20 pts)**, and **Confidence Calibration (20 pts)**, paired with the **Top 3 score-boosting actions**.
+
+### 6. Mastery Badges (5-Question Verification Challenge)
+- Concepts at `>= 80%` mastery (including Alex Rivera's *Ohm's Law* at `85%`) unlock a **5-question Mastery Challenge** (`/api/mastery-challenge`) spanning `basic`, `application`, `misconception`, and `real-world` items.
+- Scoring `>= 80%` (`4+ / 5`) awards a Gold/Silver Mastery Badge, updates mastery, and logs `'badge_earned'` in **My Learning Journey**.
+
+### 7. Teacher Heatmap Drill-Down & AI Revision Lab Generator
+- Clicking any cell or concept header in the **Teacher Concept Heatmap** opens a **Class Drill-Down Panel** displaying every student's concept mastery and open misconceptions (`misconceptionsByConcept`).
+- Cluster alerts include a **"Generate Revision Lab"** button calling `POST /api/teacher/generate-lab`, returning validated JSON with a classroom walkthrough explanation, related misconception summary, and **3 interactive practice questions** with revealable answer keys.
+
+### 8. Accessibility, Navigation & Export Enhancements
+- **Grouped Student Sidebar**: Cleanly organized into **Learn**, **Track**, and **Plan**, plus a **4-item mobile bottom navigation bar** (*Dashboard*, *Practice*, *Concept Map*, *Exam Plan*).
+- **3-Step Onboarding Tour**: First-time student sign-ins display a skippable guided tour (replayable from the profile menu).
+- **Schema v2 Migration**: Pre-existing `localStorage` profiles automatically upgrade via `migrateLearnerProfile` without data loss.
+- **Print & Export**: Both **Student Progress** and **Teacher Class Reports** provide **Print Report** (`@media print` hiding sidebar/chrome) and **Export JSON** downloads.
+
+---
+
 ## 🚀 Running the Project
 
 ```bash
@@ -231,3 +270,4 @@ npm run dev
 npm run build
 npm run start
 ```
+

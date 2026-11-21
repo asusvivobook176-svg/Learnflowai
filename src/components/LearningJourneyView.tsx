@@ -55,8 +55,14 @@ export const LearningJourneyView: React.FC<LearningJourneyViewProps> = ({
       ev.eventType !== 'misconception_resolved'
     )
       return false;
-    if (activeFilter === 'revisions' && ev.eventType !== 'revision') return false;
-    if (activeFilter === 'achievements' && ev.eventType !== 'milestone' && ev.eventType !== 'diagnostic')
+    if (activeFilter === 'revisions' && ev.eventType !== 'revision' && ev.eventType !== 'exam_plan')
+      return false;
+    if (
+      activeFilter === 'achievements' &&
+      ev.eventType !== 'milestone' &&
+      ev.eventType !== 'diagnostic' &&
+      ev.eventType !== 'badge_earned'
+    )
       return false;
 
     // Concept filter
@@ -111,6 +117,18 @@ export const LearningJourneyView: React.FC<LearningJourneyViewProps> = ({
           color: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
           label: 'Spaced Revision',
         };
+      case 'exam_plan':
+        return {
+          icon: CalendarCheck2,
+          color: 'text-cyan-300 bg-cyan-500/10 border-cyan-500/25',
+          label: 'Exam Countdown Plan',
+        };
+      case 'badge_earned':
+        return {
+          icon: Award,
+          color: 'text-amber-300 bg-amber-500/15 border-amber-500/35',
+          label: 'Mastery Badge Earned',
+        };
       case 'milestone':
         return {
           icon: Award,
@@ -138,7 +156,7 @@ export const LearningJourneyView: React.FC<LearningJourneyViewProps> = ({
       default:
         return {
           icon: Sparkles,
-          color: 'text-slate-400 bg-slate-500/10 border-slate-500/20',
+          color: 'text-slate-300 bg-slate-500/10 border-slate-500/20',
           label: 'Learning Activity',
         };
     }

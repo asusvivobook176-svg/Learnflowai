@@ -9,6 +9,7 @@ export type StudentTab =
   | 'concept-map'
   | 'practice'
   | 'revision'
+  | 'exam-planner'
   | 'misconceptions'
   | 'learn'
   | 'progress'
@@ -69,6 +70,18 @@ export interface ConceptMastery {
   }[];
 }
 
+export interface MisconceptionLibraryEntry {
+  id: string;
+  name: string;
+  concept: string;
+  conceptId: string;
+  exampleStudentPhrase: string;
+  explanation: string;
+  correctivePractice: string;
+  keywords: string[];
+  severity: 'high' | 'medium' | 'low';
+}
+
 export interface Misconception {
   id: string;
   conceptId: string;
@@ -80,6 +93,7 @@ export interface Misconception {
   status: 'active' | 'in_progress' | 'resolved';
   detectedAt: string;
   timesEncountered: number;
+  libraryEntryId?: string;
 }
 
 export interface RevisionTask {
@@ -99,8 +113,10 @@ export interface RevisionTask {
 export interface QuestionOption {
   id: string;
   text: string;
-  misconceptionId?: string; // If selecting this option reveals a specific misconception
+  misconceptionId?: string;
 }
+
+export type ChallengeDimension = 'basic' | 'application' | 'misconception' | 'real-world';
 
 export interface Question {
   id: string;
@@ -110,11 +126,124 @@ export interface Question {
   questionText: string;
   contextOrDiagram?: string;
   diagramSvgType?: 'series_resistors' | 'parallel_resistors' | 'ohms_circuit' | 'power_bulb';
+  dimension?: ChallengeDimension;
   options: QuestionOption[];
   correctOptionId: string;
   explanation: string;
   trapExplanations?: Record<string, string>;
   keyTakeaway: string;
+}
+
+export interface PracticeAttemptMetric {
+  id: string;
+  timestamp: string;
+  conceptId: string;
+  isCorrect: boolean;
+  responseTimeMs: number;
+  confidence: ConfidenceLevel;
+  difficulty: DifficultyLevel;
+}
+
+export interface DifficultyCalibrationResult {
+  difficulty: DifficultyLevel;
+  reasonLine: string;
+  factors: {
+    recentAccuracyPct: number;
+    avgResponseSeconds: number;
+    lastConfidence: ConfidenceLevel;
+    conceptMasteryPct: number;
+  };
+}
+
+export interface PrerequisiteRecommendation {
+  hasWeakPrerequisite: boolean;
+  targetConceptId: string;
+  recommendedConceptId: string;
+  recommendedConceptName: string;
+  chain: string[]; // ordered prerequisite -> ... -> target
+  reason: string;
+}
+
+export interface ExamPlanTask {
+  id: string;
+  conceptId: string;
+  conceptName: string;
+  title: string;
+  focusType: 'weak_drill' | 'spaced_review' | 'misconception_fix' | 'mock_check';
+  estimatedMinutes: number;
+  completed: boolean;
+}
+
+export interface ExamPlanDay {
+  dayNumber: number;
+  dateISO: string;
+  dateLabel: string;
+  theme: string;
+  tasks: ExamPlanTask[];
+}
+
+export interface ExamPlanState {
+  examDateISO: string;
+  selectedConceptIds: string[];
+  generatedAtISO: string;
+  generatedAtModelVersion: number;
+  needsUpdate: boolean;
+  lastModelChangeReason?: string;
+  days: ExamPlanDay[];
+}
+
+export interface ExamReadinessBreakdown {
+  totalScore: number; // 0 to 100
+  components: {
+    mastery: { score: number; max: number; label: string; detail: string };
+    retention: { score: number; max: number; label: string; detail: string };
+    misconceptions: { score: number; max: number; label: string; detail: string };
+    calibration: { score: number; max: number; label: string; detail: string };
+  };
+  topActions: {
+    id: string;
+    title: string;
+    reason: string;
+    estimatedGainPoints: number;
+    estimatedMinutes: number;
+    targetTab: StudentTab;
+    targetConceptId?: string;
+  }[];
+}
+
+export interface MasteryBadge {
+  id: string;
+  conceptId: string;
+  conceptName: string;
+  earnedAt: string;
+  scorePercentage: number;
+  correctCount: number;
+  totalQuestions: number;
+  tier: 'gold' | 'silver';
+}
+
+export interface TeacherGeneratedLab {
+  id: string;
+  alertId?: string;
+  title: string;
+  concept: string;
+  shortExplanation: string;
+  relatedMisconception: string;
+  practiceQuestions: {
+    id: string;
+    questionText: string;
+    options: { id: string; text: string }[];
+    correctOptionId: string;
+    explanation: string;
+  }[];
+  usedFallback?: boolean;
+  fallbackNotice?: string | null;
+}
+
+export interface ToastItem {
+  id: string;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'error';
 }
 
 export interface StudentAnswerRecord {
@@ -134,8 +263,8 @@ export interface StudentAnswerRecord {
 
 export interface LearningMemoryEvent {
   id: string;
-  timestamp: string; // e.g. "October 30, 2026 - 4:15 PM"
-  dateKey: string; // e.g. "2026-10-30" or "October 30"
+  timestamp: string;
+  dateKey: string;
   eventType:
     | 'diagnostic'
     | 'voice_query'
@@ -145,6 +274,8 @@ export interface LearningMemoryEvent {
     | 'misconception_resolved'
     | 'revision'
     | 'milestone'
+    | 'badge_earned'
+    | 'exam_plan'
     | 'teach_back'
     | 'socratic'
     | 'concept_rescue';
@@ -282,6 +413,8 @@ export interface RescueEvent {
 }
 
 export interface StudentProfile {
+  schemaVersion: number;
+  learnerModelVersion: number;
   id: string;
   name: string;
   avatar: string;
@@ -296,11 +429,23 @@ export interface StudentProfile {
   consecutiveWrongByConcept?: Record<string, number>;
   misconceptions: Misconception[];
   revisionSchedule: RevisionTask[];
+  practiceMetrics: PracticeAttemptMetric[];
+  examPlan: ExamPlanState | null;
+  masteryBadges: MasteryBadge[];
+  onboardingCompleted: boolean;
   recentActivity: {
     id: string;
     title: string;
     timestamp: string;
-    type: 'diagnostic' | 'voice_query' | 'practice' | 'revision' | 'teach_back' | 'socratic' | 'concept_rescue';
+    type:
+      | 'diagnostic'
+      | 'voice_query'
+      | 'practice'
+      | 'revision'
+      | 'teach_back'
+      | 'socratic'
+      | 'concept_rescue'
+      | 'badge_earned';
     conceptName: string;
     details: string;
   }[];
@@ -355,6 +500,7 @@ export interface ReasoningAnalysisResult {
   missingKnowledge: string[];
   detectedMisconception: {
     id?: string;
+    libraryEntryId?: string;
     title: string;
     description: string;
     howToCorrect: string;
@@ -365,4 +511,3 @@ export interface ReasoningAnalysisResult {
   recommendedConcept: string;
   recommendedDifficulty: DifficultyLevel;
 }
-
