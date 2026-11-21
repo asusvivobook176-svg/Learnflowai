@@ -1,0 +1,6 @@
+{
+  "name": "LearnFlow AI – Voice-Powered Adaptive Exam-Prep Tutor",
+  "description": "Voice-first adaptive exam-preparation platform powered by Wispr Flow and living learner models.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
